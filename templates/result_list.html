@@ -1,0 +1,12 @@
+<ul class="col result-list">
+    {% for web_page in web_pages %}
+        <li class="result-item">
+            <a href="{{ web_page.url }}">
+                <h2 class="page-title">{{ web_page.title }}</h2>
+                <p class="page-link">{{ web_page.url }}</p>
+                <p class="page-summary">{{ web_page.summary }}</p>
+                <p class="page-pubdate">Published on {{ web_page.publish_date }}</p>
+            </a>
+        </li>
+    {% endfor %}
+</ul>

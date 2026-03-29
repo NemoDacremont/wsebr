@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="/assets/style.css" rel="stylesheet">
+    <link rel="preload" href="/assets/roboto400.ttf" as="font" type="font/ttf" >
+    <link rel="preload" href="/assets/roboto700.ttf" as="font" type="font/ttf" >
+</head>
+
+<body>
+    <header>
+        <a href="/"><h1>wsebr</h1></a>
+        <form id="search" action="/search">
+            <input name="query" id="query" value="{{ search_value }}" placeholder="{{ search_placeholder}}">
+            <button>Search</button>
+        </form>
+    </header>
+    <p>{{ result_count }} results in {{ search_duration }} ms</p>
+
+    <hr />
+
+    <main class="container">
+        {% if result_count == 0 %}
+            <p>No result found ¯\_ (ᵕ—ᴗ—)_/¯</p>
+        {% else %}
+            {% include "result_list.html" %}
+            {% include "pages.html" %}
+        {% endif %}
+    </main>
+
+    {% include "footer.html" %}
+</body>
+</html>

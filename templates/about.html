@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wsebr - search the small web</title>
+    <link href="/assets/style.css" rel="stylesheet">
+    <link rel="preload" href="/assets/roboto400.ttf" as="font" type="font/ttf" >
+    <link rel="preload" href="/assets/roboto700.ttf" as="font" type="font/ttf" >
+<style>p { margin-bottom: 1rem;}</style>
+</head>
+
+<body>
+    <header>
+        <h1><a href="/">wsebr</a> &mdash; search the small web</h1>
+    </header>
+    <hr>
+
+    <main class="container">
+        <p>Hey there !</p>
+
+        <img src="/assets/smallweb.gif" alt="Small web gif from kagi">
+
+        <p>I created this project for two reasons, the first is I feel like we are recently being flooded by AI generated news articles, blogs, websites and even youtube videos. This is reaching an unbearable flow, I wish to find something else. Small indie websites are amazing, and, maybe more important today, they are genuine. There is so many good indie websites and articles out there, and they are barely reachable through traditional enshittificated search engines. I wanted to have a search engine that would really help me digging into these sites.</p>
+
+        <p>The second reason is me trying to figure out if it's possible to make an effective yet minimal search engine. I did the smallest amount of research first before diving in, hence the name "worst search engine but in rust". Despite expecting it to fail miserably, it actually ended up working pretty fine (at least if you don't try to break it :) ).</p>
+
+        <p>Here are some stats about this wsebr instance :</p>
+
+        <ul style="margin-bottom: 1rem;">
+            <li>{{ index_stats.web_pages_count }} web pages indexed</li>
+            <li>{{ index_stats.tokens_count }} tokens indexed</li>
+            <li>{{ index_stats.bm25_count }} bm25 values computed</li>
+        </ul>
+
+        <p>Note that this project is beyond beta, there is a lot of chance that there is some lags, that some features are missing or even some bugs... However, it should be quite safe and js-free</p>
+
+        <p>Amazing projects that inspired me, you should check them :</p>
+
+        <ul style="margin-bottom: 1rem;">
+            <li><a href="https://codeberg.org/susam/wander">Wander</a> is a console to browse the small web.</li>
+            <li><a href="https://github.com/kagisearch/smallweb">Kagi small web</a>, amazing initiative from <a href="https://kagi.com/">kagi</a>, most of the webpage come from their github</li>
+            <li><a href="https://github.com/pruger/tiny-brutalism-css">Tiny brutalism css</a> is an amazing minimalist CSS framework, wsebr frontend is highly inspired of this.</li>
+        </ul>
+    </main>
+
+    {% include "footer.html" %}
+</body>
+</html>

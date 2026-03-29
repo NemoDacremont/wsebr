@@ -1,0 +1,152 @@
+/*! minireset.css v0.0.6 | MIT License | github.com/jgthms/minireset.css */html,body,p,ol,ul,li,dl,dt,dd,blockquote,figure,fieldset,legend,textarea,pre,iframe,hr,h1,h2,h3,h4,h5,h6{margin:0;padding:0}h1,h2,h3,h4,h5,h6{font-size:100%;font-weight:normal}ul{list-style:none}button,input,select{margin:0}html{box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}img,video{height:auto;max-width:100%}iframe{border:0}table{border-collapse:collapse;border-spacing:0}td,th{padding:0}
+
+ol { list-style: none; }
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/roboto400.ttf") format('truetype');
+}
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/roboto700.ttf") format('truetype');
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+}
+
+.col {
+    display: flex;
+    flex-direction: column;
+}
+
+a { color: var(--foreground); }
+a:hover, a:focus { background-color: var(--accent2); }
+h1 { font-size: 32px; }
+
+
+:root {
+    --background: #D4D4D4;
+    --foreground: #2E2E2E;
+    --accent1: #7D7F80;
+    --accent2: #F0C3C3;
+    --white: #FFFFFF;
+}
+
+body {
+    background-color: var(--white);
+    color: var(--foreground);
+    font-family: "Roboto Mono", sans-serif;
+    margin: 0;
+    padding: 2rem;
+    max-width: 800px;
+    font-size: 1rem;
+}
+
+header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* --- Search Form --- */
+#search {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+}
+
+hr {
+    margin: 1rem 0 2rem 0;
+}
+
+#query {
+    flex-grow: 1;
+    width: 20rem;
+    padding: 0.75rem;
+    background-color: var(--white);
+    border: 2px solid var(--foreground);
+    outline: none;
+    color: var(--foreground);
+}
+
+#query:focus {
+    box-shadow: 4px 4px var(--accent2);
+}
+
+input {
+    font-size: 1rem;
+}
+
+button, .button {
+    padding: 0.75rem 1.5rem;
+    background-color: var(--white);
+    color: var(--foreground);
+    border: 2px solid var(--foreground);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+/* Instant, high-contrast hover */
+button:hover,
+button:focus,
+.button:hover,
+.button:focus {
+    box-shadow: 4px 4px var(--accent2);
+}
+
+/* --- Results List --- */
+.result-list {
+    list-style: none;
+    gap: 1rem;
+}
+
+.result-item a {
+    color: var(--foreground);
+    text-decoration: none;
+    box-sizing: border-box;
+    padding: 1rem;
+    display: block;
+}
+
+.result-item:hover {
+    background-color: var(--accent2);
+}
+
+.page-title {
+    font-size: 24px;
+    text-decoration: underline;
+}
+
+.page-link {
+    margin-top: .75rem;
+    margin-bottom: .25rem;
+    padding-left: 2rem;
+    color: var(--accent1);
+}
+
+.pages {
+    padding: 1rem;
+    align-items: center;
+}
+
+.pages-list {
+    padding: 0.75rem 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.pages-list li {
+    padding: .25rem;
+}

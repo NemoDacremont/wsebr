@@ -1,0 +1,13 @@
+<hr>
+<div class="col pages">
+    <h3>pages</h3>
+    <ol class="pages-list">
+        {% for page in 1..page_count %}
+            {% if page == current_page %}
+                <li>{{ page }}</li>
+            {% else %}
+                <a href="/search?query={{ query }}&page={{ page }}"><li>{{ page }}</li></a>
+            {% endif %}
+        {% endfor %}
+    </ol>
+</div>
