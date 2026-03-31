@@ -11,13 +11,13 @@ chrono = "0.4.44"
 deadpool-sqlite = { version = "0.13.0", features = ["array", "cache", "rt_tokio_1", "vtab"] }
 displaydoc = "0.2.5"
 feed-rs = "2.3.1"
+futures = "0.3.32"
 htmlentity = "1.3.2"
 nanohtml2text = "0.2.1"
-rayon = "1.11.0"
-reqwest = { version = "0.13.2", features = ["blocking"] }
+reqwest = { version = "0.13.2" }
 rusqlite = { version = "=0.38.0", features = ["array"] }
 thiserror = "2.0.18"
-tokio = { version = "1.50.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.50.0", features = ["full"] }
 tower-http = { version = "0.6.8", features = ["fs", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
