@@ -2,3 +2,4 @@
 /crawled
 /database.db*
 /stopwords.txt
+/.stopwords
