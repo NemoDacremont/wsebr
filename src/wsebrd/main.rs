@@ -31,6 +31,19 @@ struct SearchTemplate<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "latest.html")]
+struct LatestTemplate<'a> {
+    current_page: i64,
+    result_count: i64,
+    page_count: i64,
+    title: &'a str,
+    search_value: &'a str,
+    search_duration: u128,
+    search_placeholder: &'a str,
+    web_pages: &'a Vec<WebPage>,
+}
+
+#[derive(Template)]
 #[template(path = "about.html")]
 struct AboutTemplate<'a> {
     index_stats: &'a IndexStats,
@@ -233,15 +246,14 @@ async fn latest(
     truncate_summary(&mut results);
 
     Ok(Html(
-        SearchTemplate {
-            current_page: 1,
+        LatestTemplate {
+            current_page: page,
             result_count: 10,
-            page_count: 6,
-            query: "",
+            page_count: 11,
             search_duration: (end - start).as_millis(),
             search_value: "",
-            search_placeholder: "You're being lucky :)",
-            title: "Lucky pages :)",
+            search_placeholder: "These are the latest publication",
+            title: "Latest publication",
             web_pages: &results,
         }
         .render()?,
