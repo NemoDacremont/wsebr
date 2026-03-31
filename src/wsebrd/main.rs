@@ -132,6 +132,7 @@ async fn main() -> Result<(), rusqlite::Error> {
         .route("/search", get(search))
         .route("/random", get(random))
         .route("/latest", get(latest))
+        .nest_service("/robots.txt", ServeFile::new("templates/robots.txt"))
         .fallback_service(ServeFile::new("templates/home.html"))
         .with_state(app_state);
 
