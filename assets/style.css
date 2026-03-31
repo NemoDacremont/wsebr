@@ -129,7 +129,7 @@ button:focus,
 }
 
 .page-link {
-    margin-top: .75rem;
+    margin-top: .25rem;
     margin-bottom: .25rem;
     padding-left: 2rem;
     color: var(--accent1);
@@ -138,6 +138,11 @@ button:focus,
 .pages {
     padding: 1rem;
     align-items: center;
+}
+
+.page-pubdate {
+    margin-top: .25rem;
+    margin-left: 1rem;
 }
 
 .pages-list {
