@@ -1,68 +1,96 @@
-use rayon::prelude::*;
-use reqwest::blocking;
-use std::{
-    env::args,
-    fs::{self, File, create_dir_all},
-    io::{BufRead, BufReader},
-    path::PathBuf,
-};
+use futures::stream::{self, StreamExt};
+use reqwest::Client;
+use std::{env::args, time::Duration};
+use tokio::fs::{self, File};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-fn crawl(url: String, client: &blocking::Client) {
+// We pass `Client` by value here. Because `reqwest::Client` internally 
+// wraps its state in an Arc, cloning it is extremely cheap and is the 
+// standard way to share it across async tasks.
+async fn crawl(url: String, client: Client) {
     let mut parts = url.split('/').skip(2);
     let domain = parts.next().expect("couldn't retrieve domain from URL");
     let filename = parts.last().unwrap_or("index.html");
 
     if domain == "simturax.com" {
-        println!("{domain} - blacklisted")
+        println!("{} - blacklisted", domain);
+        return; // Added return so it actually skips fetching
     }
 
-    let directory = "./crawled/".to_string() + domain + "/";
-    let out_path = directory.to_owned() + filename;
+    let directory = format!("./crawled/{}/", domain);
+    let out_path = format!("{}{}", directory, filename);
 
-    if PathBuf::from(out_path.as_str()).exists() {
+    // Uncomment if you want to skip existing files
+    if tokio::fs::try_exists(&out_path).await.unwrap_or(false) {
         return;
     }
 
-    let res = client.get(&url).send();
-    if !res.is_ok() {
-        let err = res.err().unwrap();
-        println!("{url} - Couldn't fetch : {err}");
-        return;
-    }
-
-    let mut response = res.unwrap();
-
-    if response.status().is_success() {
-        create_dir_all(directory).expect("Directories to be created");
-        let mut file = File::create(&out_path).expect("File to be opened");
-        if let Err(e) = response.copy_to(&mut file) {
-            println!("{url} - Failed to write to file: {}", e);
+    let res = match client.get(&url).send().await {
+        Ok(response) => response,
+        Err(err) => {
+            println!("{} - Couldn't fetch: {}", url, err);
+            return;
         }
-        println!("{url} - Fetched");
+    };
+
+    if res.status().is_success() {
+        // Use tokio::fs for non-blocking directory creation
+        if let Err(e) = fs::create_dir_all(&directory).await {
+            println!("{} - Failed to create directory: {}", url, e);
+            return;
+        }
+
+        // Fetch the body bytes and write them to disk asynchronously
+        match res.bytes().await {
+            Ok(bytes) => {
+                if let Err(e) = fs::write(&out_path, bytes).await {
+                    println!("{} - Failed to write to file: {}", url, e);
+                } else {
+                    println!("{} - Fetched", url);
+                }
+            }
+            Err(e) => println!("{} - Failed to read response body: {}", url, e),
+        }
     } else {
-        // println!("{url} - Couldn't fetch, status {}", response.status());
+        // println!("{} - Couldn't fetch, status {}", url, res.status());
     }
-    return;
 }
 
-fn main() -> Result<(), reqwest::Error> {
-    let url_path = args().skip(1).next().expect("./crawler <urls_file>");
-    let url_file = fs::File::open(url_path).expect("./crawler <urls_file>");
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let url_path = args().nth(1).expect("Usage: ./crawler <urls_file>");
 
-    let urls: Vec<String> = BufReader::new(url_file)
-        .lines()
-        .map(|line| line.unwrap())
-        .collect();
+    let url_file = File::open(url_path).await.expect("Failed to open urls_file");
+    let reader = BufReader::new(url_file);
+    let mut lines = reader.lines();
 
-    let global_client = blocking::ClientBuilder::new()
+    let mut urls = Vec::new();
+    while let Some(line) = lines.next_line().await? {
+        if !line.trim().is_empty() {
+            urls.push(line);
+        }
+    }
+
+    let global_client = Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36")
-        .tls_danger_accept_invalid_hostnames(true)
-        .tls_danger_accept_invalid_certs(true)
-        .redirect(reqwest::redirect::Policy::limited(99))
-        .build()
-        .unwrap();
+        .danger_accept_invalid_hostnames(true)
+        .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()?;
 
-    urls.into_par_iter()
-        .for_each(|url| crawl(url, &global_client));
+    let max_concurrent_requests = 50;
+
+    stream::iter(urls)
+        .map(|url| {
+            let client = global_client.clone();
+            async move {
+                crawl(url, client).await;
+            }
+        })
+        .buffer_unordered(max_concurrent_requests)
+        .collect::<Vec<()>>()
+        .await;
+
     Ok(())
 }
