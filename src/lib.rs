@@ -43,13 +43,9 @@ pub struct WebPage {
 }
 
 impl WebPage {
-    pub fn tokenize(&self) -> impl Iterator<Item = String> {
-        fn _tokenize(string: &String) -> impl Iterator<Item = String> {
-            string
-                .as_str()
-                .split(|c: char| {
-                    !c.is_ascii() || c.is_ascii_whitespace() || c.is_ascii_punctuation()
-                })
+    pub fn tokenize(&self) -> impl Iterator<Item = String> + '_ {
+        fn tokenize_str(s: &str) -> impl Iterator<Item = String> + '_ {
+            s.split(|c: char| !c.is_ascii() || c.is_ascii_whitespace() || c.is_ascii_punctuation())
                 .map(|word| {
                     word.chars()
                         .filter(|c| c.is_ascii_alphanumeric())
@@ -59,11 +55,18 @@ impl WebPage {
                 .filter(|token| !token.is_empty())
         }
 
-        let domain = _tokenize(&self.url);
-        let title = _tokenize(&self.title);
-        let summary = _tokenize(&self.summary);
+        let title_iter = tokenize_str(&self.title);
+        let summary_iter = tokenize_str(&self.summary);
 
-        title.chain(domain).chain(summary)
+        let url_parts = self.url.split('/').skip(2);
+
+        let domain_iter = url_parts.clone().take(1).flat_map(tokenize_str);
+        let path_iter = url_parts.skip(1).flat_map(tokenize_str);
+
+        title_iter
+            .chain(summary_iter)
+            .chain(domain_iter)
+            .chain(path_iter)
     }
 }
 
@@ -79,11 +82,7 @@ impl From<Entry> for WebPage {
         let summary = match entry.summary {
             Some(text) => entity::decode(html2text(text.content.as_str()).as_bytes())
                 .to_string()
-                .unwrap_or_default()
-                .split_whitespace()
-                .take(150) // Prevent abuse of sites having huge description
-                .collect::<Vec<_>>()
-                .join(" "),
+                .unwrap_or_default(),
             None => "".to_string(),
         };
 
