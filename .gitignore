@@ -1,3 +1,4 @@
 /target
 /crawled
 /database.db*
+/stopwords.txt

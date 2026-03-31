@@ -4,7 +4,7 @@ use feed_rs::parser;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::time::Instant;
@@ -77,7 +77,14 @@ fn save_web_pages(connection: &Connection, paths: &str) -> Result<(), rusqlite::
     Ok(())
 }
 
-fn compute_idfs(connection: &Connection, threshold: f64) -> Result<(), rusqlite::Error> {
+fn compute_idfs(connection: &Connection, stop_words_file: String) -> Result<(), rusqlite::Error> {
+    let stop_words: HashSet<String> = {
+        let file = File::open(stop_words_file).unwrap();
+        let reader = BufReader::new(file);
+        let words = reader.lines().map(|line| line.unwrap_or_default());
+        HashSet::from_iter(words)
+    };
+
     // Counts the number of document in which each token appears
     let mut counts: HashMap<String, i64> = HashMap::new();
 
@@ -99,7 +106,7 @@ fn compute_idfs(connection: &Connection, threshold: f64) -> Result<(), rusqlite:
         let idf = idf as f64;
         let idf = (1. + (n - idf + 0.5) / (idf + 0.5)).log2();
 
-        if idf < threshold {
+        if stop_words.contains(&token) {
             continue;
         }
 
@@ -239,9 +246,9 @@ struct BuildWebPagesSubCmd {
 /// Tokenize all web pages in the database and compute the IDF for each token
 #[argh(subcommand, name = "idf")]
 struct BuildIDFsSubCmd {
-    /// tokens with idf below this threshold will be discarded
-    #[argh(option, default = "5.")]
-    threshold: f64,
+    /// path to a file containing the stopwords to ignore
+    #[argh(option, default = "\"stopwords.txt\".to_string()")]
+    stop_words_file: String,
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -269,7 +276,8 @@ struct SearchSubCmd {
 fn main() -> Result<(), rusqlite::Error> {
     let wsebr: WSEBR = argh::from_env();
 
-    let connection = sqlite_init(&wsebr.database)?;
+    let connection = Connection::open(&wsebr.database)?;
+    sqlite_init(&connection)?;
 
     match wsebr.subcommand {
         SubCmds::Build(build) => match build.buildcmd {
@@ -283,10 +291,12 @@ fn main() -> Result<(), rusqlite::Error> {
 
             BuildSubCmds::IDFs(args) => {
                 if build.rebuild {
+                    drop_tf(&connection)?;
                     drop_tokens(&connection)?;
                     create_token_table(&connection)?;
+                    create_tf_table(&connection)?;
                 }
-                compute_idfs(&connection, args.threshold)?;
+                compute_idfs(&connection, args.stop_words_file)?;
             }
 
             BuildSubCmds::Okapi(args) => {
