@@ -1,6 +1,12 @@
 /*! minireset.css v0.0.6 | MIT License | github.com/jgthms/minireset.css */html,body,p,ol,ul,li,dl,dt,dd,blockquote,figure,fieldset,legend,textarea,pre,iframe,hr,h1,h2,h3,h4,h5,h6{margin:0;padding:0}h1,h2,h3,h4,h5,h6{font-size:100%;font-weight:normal}ul{list-style:none}button,input,select{margin:0}html{box-sizing:border-box}*,*::before,*::after{box-sizing:inherit}img,video{height:auto;max-width:100%}iframe{border:0}table{border-collapse:collapse;border-spacing:0}td,th{padding:0}
 
-ol { list-style: none; }
+:root {
+    --background: #D4D4D4;
+    --foreground: #2E2E2E;
+    --accent1: #7D7F80;
+    --accent2: #F0C3C3;
+    --white: #FFFFFF;
+}
 
 @font-face {
   font-family: 'Roboto Mono';
@@ -28,18 +34,18 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
 }
 
+ol { list-style: none; }
+
+.ul {
+    list-style-type: square;
+    margin: 1em 0 1em 2em;
+}
+.ul li { margin-bottom: 0.5em; }
+
 a { color: var(--foreground); }
 a:hover, a:focus { background-color: var(--accent2); }
 h1 { font-size: 32px; }
 
-
-:root {
-    --background: #D4D4D4;
-    --foreground: #2E2E2E;
-    --accent1: #7D7F80;
-    --accent2: #F0C3C3;
-    --white: #FFFFFF;
-}
 
 body {
     background-color: var(--white);
@@ -47,23 +53,29 @@ body {
     font-family: "Roboto Mono", sans-serif;
     margin: 0;
     padding: 2rem;
+    width: 100vw;
     max-width: 800px;
     font-size: 1rem;
 }
 
+/* Maximum width */
+@media (max-width: 50rem) {
+    body { padding: 1rem }
+}
+
 header {
     position: relative;
+    margin-bottom: 1rem;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 1rem;
-    margin-bottom: 1rem;
 }
 
 /* --- Search Form --- */
 #search {
     display: flex;
     gap: 1rem;
-    width: 100%;
 }
 
 hr {
@@ -72,7 +84,9 @@ hr {
 
 #query {
     flex-grow: 1;
-    width: 20rem;
+    max-width: 20rem;
+    width: 100%;
+    position: relative;
     padding: 0.75rem;
     background-color: var(--white);
     border: 2px solid var(--foreground);
@@ -131,7 +145,10 @@ button:focus,
 .page-link {
     margin-top: .25rem;
     margin-bottom: .25rem;
-    padding-left: 2rem;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+    padding-left: 1rem;
+    overflow-x: hidden;
     color: var(--accent1);
 }
 
@@ -142,7 +159,6 @@ button:focus,
 
 .page-pubdate {
     margin-top: .25rem;
-    margin-left: 1rem;
 }
 
 .pages-list {

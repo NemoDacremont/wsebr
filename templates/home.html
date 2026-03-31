@@ -9,18 +9,18 @@
     <link rel="preload" href="/assets/roboto700.ttf" as="font" type="font/ttf" >
 </head>
 
-<body style="height: 80vh; width: 100vw; max-width: 100vw; display: flex; justify-content: center; align-items: center;">
-    <main class="container" style="display: flex; flex-direction: column;">
-        <h1 style="font-size: 32px; margin-bottom: 1rem; text-align: center;">wsebr &mdash; search the small web</h1>
-        <form style="margin-bottom: 1rem" id="search" action="/search">
+<body style="height: 80vh; width: 100vw; display: flex; justify-content: center; align-items: center;">
+    <main class="col" style="gap: 1rem;">
+        <h1 style="text-align: center;">wsebr &mdash; search the small web</h1>
+        <form id="search" action="/search">
             <input name="query" id="query" placeholder="Some amazing article">
             <button>Search</button>
         </form>
-        <div style="display: flex; justify-content: center; gap: 1rem;">
+        <nav style="display: flex; justify-content: center; flex-wrap: wrap; gap: 1rem;">
             <a href="/random"><div class="button">Feeling lucky</div></a>
             <a href="/latest"><div class="button">Latest pages</div></a>
             <a href="/about"><div class="button">About</div></a>
-        </div>
+        </nav>
     </main>
 </body>
 </html>
