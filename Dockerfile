@@ -6,27 +6,25 @@ WORKDIR /build
 # Required for build
 # RUN apk add openssl-dev openssl-libs-static musl-dev
 
+RUN apk add --no-cache sqlite-static sqlite-dev musl-dev build-base
+
 COPY Cargo.* .
 
 RUN mkdir -p src/wsebrd && \
     echo "fn main() {}" > src/wsebrd/main.rs && \
-    cargo build --target x86_64-unknown-linux-musl --release --bin wsebrd && \
+    cargo build --release --bin wsebrd && \
     rm -rf ./src/ target/release/deps/wsebrd* target/release/wsebrd*
-
-RUN apk add --no-cache sqlite-dev
 
 COPY --parents ./src/ ./assets/ ./templates/ ./
 
-RUN cargo build --release --bin wsebrd --target x86_64-unknown-linux-musl
+RUN cargo build --release --bin wsebrd
 
 FROM alpine:3.23
 
 WORKDIR /app
 
-RUN apk add --no-cache sqlite-libs
+COPY --parents ./assets/ ./templates/ ./
 
-COPY ./assets/ ./templates/ ./
-
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/wsebrd .
+COPY --from=builder /build/target/release/wsebrd .
 
 CMD ["/app/wsebrd"]
