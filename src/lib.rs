@@ -125,7 +125,7 @@ pub fn insert_web_pages(
     connection: &Connection,
     web_pages: &Vec<WebPage>,
 ) -> Result<usize, rusqlite::Error> {
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         INSERT INTO webPage
         (title, summary, link, lastUpdate, publish_date) VALUES
@@ -156,7 +156,7 @@ pub fn retrieve_web_page<F: FnMut(WebPage)>(
 
     loop {
         let batch: Vec<WebPage> = {
-            let mut stmt = connection.prepare(
+            let mut stmt = connection.prepare_cached(
                 "
             SELECT webPageId, title, summary, link, publish_date
             FROM webPage
@@ -254,7 +254,7 @@ pub fn retrieve_tokens<F: FnMut(Token)>(
     connection: &Connection,
     mut cb: F,
 ) -> Result<(), rusqlite::Error> {
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         SELECT tokenId, value, idf
         FROM token
@@ -281,7 +281,7 @@ pub fn insert_tokens(
     connection: &Connection,
     tokens: &Vec<Token>,
 ) -> Result<usize, rusqlite::Error> {
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         INSERT INTO token
         (value, idf) VALUES
@@ -347,7 +347,7 @@ pub fn retrieve_tf(
 }
 
 pub fn insert_tfs(connection: &Connection, tfs: &Vec<Tf>) -> Result<usize, rusqlite::Error> {
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         INSERT INTO tf
         (tokenId, webPageId, tf) VALUES
@@ -372,7 +372,7 @@ pub fn search_query(
     let mut out = Vec::with_capacity(10);
     let offset = 10 * (page - 1);
 
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         WITH top_results AS (
             select tf.webPageId, SUM(tf.tf) as score
@@ -424,7 +424,7 @@ pub fn search_query(
 pub fn random_web_pages(connection: &Connection) -> Result<Vec<WebPage>, rusqlite::Error> {
     let mut out = Vec::with_capacity(10);
 
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         WITH RECURSIVE
             rand_ids(webPageId) AS (
@@ -467,7 +467,7 @@ pub fn latest_web_pages(
 ) -> Result<Vec<WebPage>, rusqlite::Error> {
     let mut out = Vec::with_capacity(10);
 
-    let mut stmt = connection.prepare(
+    let mut stmt = connection.prepare_cached(
         "
         SELECT title, summary, link, publish_date
         FROM webPage
@@ -477,7 +477,7 @@ pub fn latest_web_pages(
         ",
     )?;
 
-    let web_pages = stmt.query_map([10 * page], |row| {
+    let web_pages = stmt.query_map((10 * page,), |row| {
         Ok(WebPage {
             web_page_id: -1,
             title: row.get(0)?,
