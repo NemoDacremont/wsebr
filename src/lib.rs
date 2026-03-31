@@ -7,9 +7,7 @@ use rusqlite::vtab::array::load_module;
 use rusqlite::{Connection, params};
 use std::rc::Rc;
 
-pub fn sqlite_init(db_path: &str) -> Result<Connection, rusqlite::Error> {
-    let connection = Connection::open(db_path)?;
-
+pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
     // Enable the use of `rarray` in queries
     load_module(&connection)?;
 
@@ -20,7 +18,7 @@ pub fn sqlite_init(db_path: &str) -> Result<Connection, rusqlite::Error> {
     connection.execute_batch(
         "
         pragma temp_store   = memory;
-        pragma mmap_size    = 536870912;
+        pragma mmap_size    = 2873152512;
         pragma page_size    = 4096;
         pragma journal_mode = WAL;
         pragma synchronous  = NORMAL;
@@ -30,7 +28,7 @@ pub fn sqlite_init(db_path: &str) -> Result<Connection, rusqlite::Error> {
     ",
     )?;
 
-    Ok(connection)
+    Ok(())
 }
 
 pub struct WebPage {

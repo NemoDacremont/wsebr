@@ -7,14 +7,14 @@ use axum::{
 };
 use deadpool_sqlite::{Config, Hook, Pool, Runtime};
 use reqwest::StatusCode;
-use tracing_subscriber::EnvFilter;
 use std::{cmp::min, collections::HashMap, time::Instant};
 use tokio;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use wsebr::{IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query};
+use tracing_subscriber::EnvFilter;
+use wsebr::{IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query, sqlite_init};
 
 #[derive(Template)]
 #[template(path = "search.html")]
@@ -86,10 +86,22 @@ async fn main() -> Result<(), rusqlite::Error> {
         .unwrap();
 
     let conn = pool.get().await.unwrap();
+    conn.interact(|connection| {
+        sqlite_init(&connection)?;
+
+        connection.execute_batch(
+            "
+            pragma temp_store   = memory;
+            pragma mmap_size    = 2873152512;
+            ",
+        )
+    }).await.unwrap().unwrap();
+
     let index_stats = conn
         .interact(|connection| get_stats(connection).unwrap())
         .await
         .unwrap();
+
 
     let app_state = AppState {
         pool: pool,
