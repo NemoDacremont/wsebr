@@ -84,7 +84,12 @@ impl From<Entry> for WebPage {
             None => "".to_string(),
         };
 
-        let url = match entry.links.first() {
+
+        let url = match entry
+            .links
+            .iter()
+            .find(|link| link.rel.as_ref().is_none_or(|val| val == "alternate"))
+        {
             Some(link) => link.clone().href,
             None => "".to_string(),
         };
