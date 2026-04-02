@@ -7,14 +7,15 @@ use axum::{
 };
 use deadpool_sqlite::{Config, Hook, Pool, Runtime};
 use reqwest::StatusCode;
-use std::{cmp::min, collections::HashMap, time::Instant};
+use rust_stemmers::{Algorithm, Stemmer};
+use std::{cmp::min, collections::HashMap, sync::Arc, time::Instant};
 use tokio;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
 use tracing_subscriber::EnvFilter;
-use wsebr::{IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query, sqlite_init};
+use wsebr::{IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query, sqlite_init, tokenize_str};
 
 #[derive(Template)]
 #[template(path = "search.html")]
@@ -77,6 +78,7 @@ impl IntoResponse for AppError {
 struct AppState {
     pool: Pool,
     index_stats: IndexStats,
+    stemmer: Arc<Stemmer>,
 }
 
 #[tokio::main]
@@ -115,10 +117,12 @@ async fn main() -> Result<(), rusqlite::Error> {
         .await
         .unwrap();
 
+    let stemmer = Stemmer::create(Algorithm::English);
 
     let app_state = AppState {
         pool: pool,
         index_stats: index_stats,
+        stemmer: Arc::new(stemmer),
     };
 
     tracing_subscriber::fmt()
@@ -191,16 +195,13 @@ async fn search(
 
     let query_str = params
         .get("query")
-        .map_or("".to_string(), |some| some.to_string());
+        .map_or("".to_string(), |some| some.to_ascii_lowercase().to_string());
 
     let page = params
         .get("page")
         .map_or(1, |page| page.parse::<i64>().unwrap_or(1));
 
-    let query: Vec<String> = query_str
-        .split(' ')
-        .map(|token| token.to_string())
-        .collect();
+    let query: Vec<String> = tokenize_str(query_str.as_str(), &state.stemmer).collect();
 
     let start = Instant::now();
     let (mut results, count) = conn
