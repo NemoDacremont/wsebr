@@ -5,6 +5,7 @@ use nanohtml2text::html2text;
 use rusqlite::types::Value;
 use rusqlite::vtab::array::load_module;
 use rusqlite::{Connection, params};
+use rust_stemmers::{Stemmer};
 use std::rc::Rc;
 
 pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
@@ -40,26 +41,27 @@ pub struct WebPage {
     pub publish_date: DateTime<Utc>,
 }
 
-impl WebPage {
-    pub fn tokenize(&self) -> impl Iterator<Item = String> + '_ {
-        fn tokenize_str(s: &str) -> impl Iterator<Item = String> + '_ {
-            s.split(|c: char| !c.is_ascii() || c.is_ascii_whitespace() || c.is_ascii_punctuation())
-                .map(|word| {
-                    word.chars()
-                        .filter(|c| c.is_ascii_alphanumeric())
-                        .map(|c| c.to_ascii_lowercase())
-                        .collect::<String>()
-                })
-                .filter(|token| !token.is_empty())
-        }
+pub fn tokenize_str(s: &str, stemmer: &Stemmer) -> impl Iterator<Item = String> {
+    s.split(|c: char| !c.is_ascii() || c.is_ascii_whitespace() || c.is_ascii_punctuation())
+        .map(|word| {
+            word.chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .map(|c| c.to_ascii_lowercase())
+                .collect::<String>()
+        })
+        .filter(|token| !token.is_empty())
+        .map(move |token| stemmer.stem(&token).into_owned())
+}
 
-        let title_iter = tokenize_str(&self.title);
-        let summary_iter = tokenize_str(&self.summary);
+impl WebPage {
+    pub fn tokenize(&self, stemmer: &Stemmer) -> impl Iterator<Item = String> {
+        let title_iter = tokenize_str(&self.title, stemmer);
+        let summary_iter = tokenize_str(&self.summary, stemmer);
 
         let url_parts = self.url.split('/').skip(2);
 
-        let domain_iter = url_parts.clone().take(1).flat_map(tokenize_str);
-        let path_iter = url_parts.skip(1).flat_map(tokenize_str);
+        let domain_iter = url_parts.clone().take(1).flat_map(|domain| tokenize_str(domain, stemmer));
+        let path_iter = url_parts.skip(1).flat_map(|part| tokenize_str(part, stemmer));
 
         title_iter
             .chain(summary_iter)
@@ -83,7 +85,6 @@ impl From<Entry> for WebPage {
                 .unwrap_or_default(),
             None => "".to_string(),
         };
-
 
         let url = match entry
             .links
@@ -269,7 +270,7 @@ pub fn retrieve_tokens<F: FnMut(Token)>(
     let tokens = stmt.query_map([], |row| {
         Ok(Token {
             token_id: row.get(0)?,
-            value: row.get::<usize, String>(1)?.to_string(),
+            value: row.get::<usize, String>(1)?,
             idf: row.get::<usize, f64>(2)?,
         })
     })?;

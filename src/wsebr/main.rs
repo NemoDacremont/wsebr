@@ -2,6 +2,7 @@ use argh::FromArgs;
 use chrono::Utc;
 use feed_rs::parser;
 use rusqlite::Connection;
+use rust_stemmers::{Algorithm, Stemmer};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -78,6 +79,8 @@ fn save_web_pages(connection: &Connection, paths: &str) -> Result<(), rusqlite::
 }
 
 fn compute_idfs(connection: &Connection, stop_words_file: String) -> Result<(), rusqlite::Error> {
+    let stemmer = Stemmer::create(Algorithm::English);
+
     let stop_words: HashSet<String> = {
         let file = File::open(stop_words_file).unwrap();
         let reader = BufReader::new(file);
@@ -91,7 +94,7 @@ fn compute_idfs(connection: &Connection, stop_words_file: String) -> Result<(), 
     let mut n = 0;
     retrieve_web_page(&connection, |web_page| {
         n += 1;
-        let tokens: HashSet<String> = web_page.tokenize().collect();
+        let tokens: HashSet<String> = web_page.tokenize(&stemmer).collect();
 
         for token in tokens {
             counts.insert(token.clone(), counts.get(&token).unwrap_or(&0) + 1);
@@ -131,16 +134,18 @@ fn compute_idfs(connection: &Connection, stop_words_file: String) -> Result<(), 
 }
 
 fn compute_scores(connection: &Connection, b: f64, k1: f64) -> Result<(), rusqlite::Error> {
+    let stemmer = Stemmer::create(Algorithm::English);
+
     // Compute avgdl
     let mut avgdl = 0; // arbitrary, should be avg(|D|)
     let mut doc_count = 0;
     retrieve_web_page(connection, |web_page| {
         doc_count += 1;
-        avgdl += web_page.tokenize().count();
+        avgdl += web_page.tokenize(&stemmer).count();
     })?;
     let avgdl = avgdl as f64 / doc_count as f64;
 
-    // Cache tokens idfs, ok since there is ~300k tokens
+    // Cache tokens idfs, OK since there is ~300k tokens
     let mut idfs: HashMap<String, Token> = HashMap::new();
     retrieve_tokens(connection, |token| {
         idfs.insert(token.value.to_string(), token);
@@ -162,7 +167,7 @@ fn compute_scores(connection: &Connection, b: f64, k1: f64) -> Result<(), rusqli
         let mut counts: HashMap<String, f64> = HashMap::new();
 
         let mut n = 0;
-        for token in web_page.tokenize() {
+        for token in web_page.tokenize(&stemmer) {
             n += 1;
             counts.insert(token.clone(), counts.get(&token).unwrap_or(&0f64) + 1f64);
         }
