@@ -5,7 +5,7 @@ use nanohtml2text::html2text;
 use rusqlite::types::Value;
 use rusqlite::vtab::array::load_module;
 use rusqlite::{Connection, params};
-use rust_stemmers::{Stemmer};
+use rust_stemmers::Stemmer;
 use std::rc::Rc;
 
 pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
@@ -60,8 +60,13 @@ impl WebPage {
 
         let url_parts = self.url.split('/').skip(2);
 
-        let domain_iter = url_parts.clone().take(1).flat_map(|domain| tokenize_str(domain, stemmer));
-        let path_iter = url_parts.skip(1).flat_map(|part| tokenize_str(part, stemmer));
+        let domain_iter = url_parts
+            .clone()
+            .take(1)
+            .flat_map(|domain| tokenize_str(domain, stemmer));
+        let path_iter = url_parts
+            .skip(1)
+            .flat_map(|part| tokenize_str(part, stemmer));
 
         title_iter
             .chain(summary_iter)
@@ -160,7 +165,13 @@ pub fn retrieve_web_page<F: FnMut(WebPage)>(
     let batch_size: i64 = 1000;
     let mut last_id: i64 = 1;
 
+    let mut i = 0;
     loop {
+        i += 1;
+        if i > 10000 {
+            break;
+        }
+
         let batch: Vec<WebPage> = {
             let mut stmt = connection.prepare_cached(
                 "
@@ -374,55 +385,110 @@ pub fn search_query(
     connection: &Connection,
     query: Vec<String>,
     page: i64,
+    site: Option<&str>,
+    req_tokens: Option<Vec<String>>,
 ) -> Result<(Vec<WebPage>, i64), rusqlite::Error> {
     let mut out = Vec::with_capacity(10);
     let offset = 10 * (page - 1);
 
-    let mut stmt = connection.prepare_cached(
+    let mut sql = String::from(
         "
         WITH top_results AS (
             select tf.webPageId, SUM(tf.tf) as score
             FROM token t
             JOIN tf on t.tokenId = tf.tokenId
+        ",
+    );
+
+    if site.is_some() || req_tokens.is_some() {
+        sql.push_str("NATURAL JOIN webPage ");
+    }
+
+    sql.push_str("
             WHERE t.value IN (SELECT value FROM token WHERE value IN rarray(?1) ORDER BY idf DESC LIMIT 10)
+    ");
+
+    if site.is_some() {
+        sql.push_str("AND (?2 IS NULL OR webPage.link LIKE 'http%' || ?2 || '%') ");
+    }
+
+    if req_tokens.is_some() {
+        sql.push_str("AND (?3 OR tf.webPageId IN (SELECT t.webPageId FROM tf t NATURAL JOIN token WHERE token.value IN rarray(?4))) ");
+    }
+
+    sql.push_str(
+        "
             GROUP BY tf.webPageId
             ORDER BY score DESC
             LIMIT 10
-            OFFSET ?2
+            OFFSET ?5
         )
 
         SELECT tr.score, w.title, w.summary, w.link, w.publish_date
         FROM top_results tr
         JOIN webPage w ON w.webPageId = tr.webPageId
         ORDER BY tr.score DESC
-        ",
-    )?;
+    ",
+    );
+
+    let mut stmt = connection.prepare_cached(&sql)?;
 
     let values = Rc::new(query.into_iter().map(Value::from).collect::<Vec<Value>>());
+    let req_tokens = match req_tokens {
+        Some(req_tokens) => Some(Rc::new(
+            req_tokens
+                .into_iter()
+                .map(Value::from)
+                .collect::<Vec<Value>>(),
+        )),
+        None => None,
+    };
 
-    let web_pages = stmt.query_map((&values, offset), |row| {
-        Ok(WebPage {
-            web_page_id: -1,
-            title: row.get(1)?,
-            summary: row.get(2)?,
-            url: row.get(3)?,
-            publish_date: DateTime::from_timestamp_millis(row.get(4)?).unwrap(),
-            last_update: 0,
-        })
-    })?;
+    let web_pages = stmt.query_map(
+        (&values, &site, req_tokens.is_none(), &req_tokens, offset),
+        |row| {
+            Ok(WebPage {
+                web_page_id: -1,
+                title: row.get(1)?,
+                summary: row.get(2)?,
+                url: row.get(3)?,
+                publish_date: DateTime::from_timestamp_millis(row.get(4)?).unwrap(),
+                last_update: 0,
+            })
+        },
+    )?;
 
     for web_page in web_pages {
         let web_page = web_page?;
         out.push(web_page);
     }
 
-    let count = connection.query_one("
-        SELECT count(*)
-        FROM token
-        NATURAL JOIN tf
-        WHERE value in (select value from token where value in rarray(?1) order by idf desc limit 10);
-        ", (values,), |row| row.get(0))?;
-    // let count = 100;
+    let mut count_sql = String::from(
+        "
+        SELECT count(distinct tf.webPageId)
+        FROM token t
+        NATURAL JOIN tf 
+        ",
+    );
+
+    if site.is_some() || req_tokens.is_some() {
+        count_sql.push_str("NATURAL JOIN webPage ");
+    }
+
+    count_sql.push_str("WHERE t.value IN (SELECT value FROM token WHERE value IN rarray(?4) ORDER BY idf DESC LIMIT 10) ");
+
+    if site.is_some() {
+        count_sql.push_str("AND (?1 IS NULL OR webPage.link LIKE 'http%' || ?1 || '%') ");
+    }
+    if req_tokens.is_some() {
+        count_sql.push_str("AND (?2 OR tf.webPageId IN (SELECT t.webPageId FROM tf t NATURAL JOIN token WHERE token.value IN rarray(?3))) ");
+    }
+
+    let count = connection.query_one(
+        &count_sql,
+        (&site, req_tokens.is_none(), &req_tokens, values),
+        |row| row.get(0),
+    )?;
 
     Ok((out, count))
 }
