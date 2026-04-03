@@ -15,7 +15,10 @@ use tower_http::{
     trace::TraceLayer,
 };
 use tracing_subscriber::EnvFilter;
-use wsebr::{IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query, sqlite_init, tokenize_str};
+use wsebr::{
+    IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query, sqlite_init,
+    tokenize_str,
+};
 
 #[derive(Template)]
 #[template(path = "search.html")]
@@ -110,7 +113,10 @@ async fn main() -> Result<(), rusqlite::Error> {
             pragma mmap_size    = 2873152512;
             ",
         )
-    }).await.unwrap().unwrap();
+    })
+    .await
+    .unwrap()
+    .unwrap();
 
     let index_stats = conn
         .interact(|connection| get_stats(connection).unwrap())
@@ -193,34 +199,69 @@ async fn search(
 ) -> Result<impl IntoResponse, AppError> {
     let conn = state.pool.get().await.unwrap();
 
-    let query_str = params
-        .get("query")
-        .map_or("".to_string(), |some| some.to_ascii_lowercase().to_string());
-
     let page = params
         .get("page")
         .map_or(1, |page| page.parse::<i64>().unwrap_or(1));
 
-    let query: Vec<String> = tokenize_str(query_str.as_str(), &state.stemmer).collect();
+    let query_raw = params
+        .get("query")
+        .map_or("", |v| v);
+
+    let query_str = query_raw.to_ascii_lowercase().to_string();
+
+    let site = query_str
+        .split_whitespace()
+        .filter(|word| word.starts_with("site:"))
+        .map(|word| word.strip_prefix("site:").unwrap().to_string())
+        .next();
+
+    let req_tokens: Vec<String> = query_str
+        .split_whitespace()
+        .filter(|word| {
+            (word.starts_with('\'') && word.ends_with('\''))
+                || (word.starts_with('"') && word.ends_with('"'))
+        })
+        .flat_map(|word| tokenize_str(word, &state.stemmer))
+        .collect();
+
+    let req_tokens = if req_tokens.is_empty() {
+        None
+    } else {
+        Some(req_tokens)
+    };
+
+    let query_str = query_str
+        .split_whitespace()
+        .filter(|word| {
+            !word.starts_with("site:")
+                && !(word.starts_with('\'') && word.ends_with('\''))
+                && !(word.starts_with('"') && word.ends_with('"'))
+        })
+        .collect::<Vec<&str>>()
+        .join(" ");
+
+    let query: Vec<String> = tokenize_str(&query_str, &state.stemmer).collect();
 
     let start = Instant::now();
     let (mut results, count) = conn
-        .interact(move |connection| search_query(&connection, query, page).unwrap())
+        .interact(move |connection| {
+            search_query(&connection, query, page, site.as_deref(), req_tokens).unwrap()
+        })
         .await
         .unwrap();
     let end = Instant::now();
     truncate_summary(&mut results);
 
-    let title = format!("Results for {query_str}");
+    let title = format!("Results for {query_raw}");
 
     Ok(Html(
         SearchTemplate {
             current_page: page,
             result_count: count,
-            page_count: 1 + min(count, 100) / 10,
-            query: &query_str,
+            page_count: 1 + min(count, 100) / 10 + (min(count, 100) % 10 != 0) as i64,
+            query: &query_raw,
             search_duration: (end - start).as_millis(),
-            search_value: &query_str,
+            search_value: &query_raw,
             search_placeholder: "",
             title: &title,
             web_pages: &results,

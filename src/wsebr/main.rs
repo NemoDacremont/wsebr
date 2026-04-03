@@ -313,7 +313,7 @@ fn main() -> Result<(), rusqlite::Error> {
             }
         },
         SubCmds::Search(args) => {
-            let (web_pages, _count) = search_query(&connection, args.query, 1)?;
+            let (web_pages, _count) = search_query(&connection, args.query, 1, None, None)?;
 
             let mut i = 1;
             for web_page in web_pages {
