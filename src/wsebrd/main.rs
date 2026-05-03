@@ -86,7 +86,6 @@ impl IntoResponse for AppError {
 #[derive(Clone)]
 struct AppState {
     pool: Pool,
-    index_stats: IndexStats,
     stemmer: Arc<Stemmer>,
 }
 
@@ -126,16 +125,10 @@ async fn main() -> Result<(), rusqlite::Error> {
     .unwrap()
     .unwrap();
 
-    let index_stats = conn
-        .interact(|connection| get_stats(connection).unwrap())
-        .await
-        .unwrap();
-
     let stemmer = Stemmer::create(Algorithm::English);
 
     let app_state = AppState {
         pool: pool,
-        index_stats: index_stats,
         stemmer: Arc::new(stemmer),
     };
 
@@ -316,9 +309,15 @@ async fn latest(
 }
 
 async fn about(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
+    let conn = state.pool.get().await.unwrap();
+    let index_stats = conn
+        .interact(|connection| get_stats(connection).unwrap())
+        .await
+        .unwrap();
+
     Ok(Html(
         AboutTemplate {
-            index_stats: &state.index_stats,
+            index_stats: &index_stats,
         }
         .render()?,
     ))
