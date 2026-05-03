@@ -1,0 +1,7 @@
+#!/bin/sh
+ulimit -n 20000
+
+/app/wsebr-crawler -j 10 --rss-file /app/smallweb.txt increment -d /data/database.db --stop-words-file /app/stopwords.txt
+/app/wsebr -d /data/database.db build idf
+/app/wsebr -d /data/database.db build okapi
+/app/wsebr -d /data/database.db build championlist

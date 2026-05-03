@@ -1,6 +1,6 @@
 release_prefix ?= target/release
 wsebr = $(release_prefix)/wsebr
-wsebr_crawler = $(release_prefix)/wsebr_crawler
+wsebr_crawler = $(release_prefix)/wsebr-crawler
 
 langs = arabic bulgarian czech chinese dutch english german greek finnish french hindi hungarian indonesian italian japanese latvian norwegian polish portuguese romanian russian slovak spanish swedish turkish
 stopwords = $(addprefix .stopwords/,$(langs))
@@ -12,9 +12,9 @@ PHONY += docker
 docker:
 	docker build -t ghcr.io/nemodacremont/wsebrd:latest .
 
-buid: database.db
+build: database.db
 
-$(wsebr) $(wsebr_crawler):
+$(wsebr) $(wsebr_crawler): $(shell find src -iname '*.rs')
 	cargo build --release
 
 crawled: smallweb.txt

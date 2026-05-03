@@ -17,14 +17,25 @@ RUN mkdir -p src/wsebrd && \
 
 COPY --parents ./src/ ./assets/ ./templates/ ./
 
-RUN cargo build --release --bin wsebrd
+RUN cargo build --release
 
-FROM alpine:3.23
+FROM alpine:3.23 AS make-builder
+
+WORKDIR /build
+
+RUN apk add --no-cache make curl
+COPY Makefile .
+RUN make -j4 stopwords.txt smallweb.txt
+
+FROM ghcr.io/linuxserver/baseimage-alpine:3.23
 
 WORKDIR /app
 
+EXPOSE 3000
+
+COPY /docker /
 COPY --parents ./assets/ ./templates/ ./
 
-COPY --from=builder /build/target/release/wsebrd .
+COPY --from=builder /build/target/release/wsebrd /build/target/release/wsebr /build/target/release/wsebr-crawler .
 
-CMD ["/app/wsebrd"]
+COPY --from=make-builder /build/stopwords.txt /build/smallweb.txt .
