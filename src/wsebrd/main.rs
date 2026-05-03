@@ -1,9 +1,7 @@
+use argh::FromArgs;
 use askama::Template;
 use axum::{
-    Router,
-    extract::{Query, State},
-    response::{Html, IntoResponse, Response},
-    routing::get,
+    Router, extract::{Query, State}, middleware::map_response, response::{Html, IntoResponse, Response}, routing::get
 };
 use deadpool_sqlite::{Config, Hook, Pool, Runtime};
 use reqwest::StatusCode;
@@ -19,6 +17,14 @@ use wsebr::{
     IndexStats, WebPage, get_stats, latest_web_pages, random_web_pages, search_query, sqlite_init,
     tokenize_str,
 };
+
+#[derive(FromArgs, PartialEq, Debug)]
+/// daemon server serving small web
+struct Wsebrd {
+    /// path to the sqlite databae
+    #[argh(option, short = 'd', default = "String::from(\"./database.db\")")]
+    database: String,
+}
 
 #[derive(Template)]
 #[template(path = "search.html")]
@@ -86,7 +92,9 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), rusqlite::Error> {
-    let cfg = Config::new("./database.db");
+    let args: Wsebrd = argh::from_env();
+
+    let cfg = Config::new(args.database);
     let pool = cfg
         .builder(Runtime::Tokio1)
         .unwrap()
@@ -137,7 +145,7 @@ async fn main() -> Result<(), rusqlite::Error> {
 
     let app = Router::new()
         .layer(TraceLayer::new_for_http())
-        .nest_service("/assets", ServeDir::new("assets"))
+        .nest_service("/assets", ServeDir::new("assets").precompressed_gzip())
         .route("/about", get(about))
         .route("/search", get(search))
         .route("/random", get(random))
@@ -241,6 +249,7 @@ async fn search(
         .join(" ");
 
     let query: Vec<String> = tokenize_str(&query_str, &state.stemmer).collect();
+    tracing::debug!("{:?},{:?},{:?},{:?}", query_raw, query, site, req_tokens);
 
     let start = Instant::now();
     let (mut results, count) = conn
@@ -251,6 +260,9 @@ async fn search(
         .unwrap();
     let end = Instant::now();
     truncate_summary(&mut results);
+
+    tracing::debug!("{count}");
+
 
     let title = format!("Results for {query_raw}");
 

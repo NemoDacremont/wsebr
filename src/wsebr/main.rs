@@ -2,13 +2,12 @@ use argh::FromArgs;
 use chrono::Utc;
 use feed_rs::parser;
 use rusqlite::Connection;
-use rust_stemmers::{Algorithm, Stemmer};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::exit;
 use std::time::Instant;
+use tracing_subscriber::EnvFilter;
 use wsebr::*;
 
 fn find_files(path: PathBuf) -> Vec<PathBuf> {
@@ -35,52 +34,7 @@ fn find_files(path: PathBuf) -> Vec<PathBuf> {
     paths
 }
 
-fn save_web_pages(connection: &Connection, paths: &str) -> Result<(), rusqlite::Error> {
-    let paths = find_files(paths.parse().unwrap());
-
-    let mut start = Instant::now();
-    let mut i = 0;
-    for path in paths {
-        let file = File::open(&path).unwrap();
-        let feed_res = parser::parse(BufReader::new(file));
-
-        if feed_res.is_err() {
-            continue;
-        }
-
-        let feed = feed_res.unwrap();
-
-        let web_pages = feed
-            .entries
-            .iter()
-            .map(|entry| WebPage::from(entry.clone()));
-
-        let mut buffer = Vec::with_capacity(web_pages.len());
-        for web_page in web_pages {
-            i += 1;
-            if i % 10000 == 0 {
-                println!(
-                    "{i} {} {}",
-                    web_page.url,
-                    (Instant::now() - start).as_secs_f32()
-                );
-                start = Instant::now();
-            }
-
-            if web_page.publish_date > Utc::now() || !web_page.url.starts_with("http") {
-                continue;
-            }
-            buffer.push(web_page);
-        }
-
-        insert_web_pages(&connection, &buffer)?;
-    }
-    Ok(())
-}
-
-fn compute_idfs(connection: &Connection, stop_words_file: String) -> Result<(), rusqlite::Error> {
-    let stemmer = Stemmer::create(Algorithm::English);
-
+fn save_web_pages(connection: &Connection, paths: &str, stop_words_file: &str) -> Result<(), rusqlite::Error> {
     let stop_words: HashSet<String> = {
         let file = File::open(stop_words_file).unwrap();
         let reader = BufReader::new(file);
@@ -88,116 +42,82 @@ fn compute_idfs(connection: &Connection, stop_words_file: String) -> Result<(), 
         HashSet::from_iter(words)
     };
 
-    // Counts the number of document in which each token appears
-    let mut counts: HashMap<String, i64> = HashMap::new();
-
-    let mut n = 0;
-    retrieve_web_page(&connection, |web_page| {
-        n += 1;
-        let tokens: HashSet<String> = web_page.tokenize(&stemmer).collect();
-
-        for token in tokens {
-            counts.insert(token.clone(), counts.get(&token).unwrap_or(&0) + 1);
-        }
-    })?;
-    let n = n as f64;
+    let paths = find_files(paths.parse().unwrap());
 
     let mut start = Instant::now();
     let mut i = 0;
-    let mut tokens = Vec::with_capacity(counts.len());
-    for (token, idf) in counts {
-        let idf = idf as f64;
-        let idf = (1. + (n - idf + 0.5) / (idf + 0.5)).log2();
+    let ncount = paths.len();
+    // Batch transaction
+    connection.execute_batch("BEGIN;")?;
 
-        if stop_words.contains(&token) {
-            continue;
-        }
-
+    for path in paths {
         i += 1;
-        if i % 15000 == 0 {
+        if i % 100 == 0 {
+            connection.execute_batch("COMMIT;")?;
+            connection.execute_batch("BEGIN;")?;
             println!(
-                "iter: {i} - inserted {token} idf={idf:.4} in {:.2} secs",
+                "{i}/{ncount} commit {}",
                 (Instant::now() - start).as_secs_f32()
             );
-            start = Instant::now()
+            start = Instant::now();
+        } else {
+            println!("{i}/{ncount}");
         }
 
-        tokens.push(Token {
-            token_id: -1,
-            value: token,
-            idf: idf,
-        });
-    }
-    insert_tokens(&connection, &tokens)?;
+        let file = File::open(&path).unwrap();
+        let feed = parser::parse(BufReader::new(file));
 
+        // silently fail..... but idc
+        if feed.is_err() {
+            continue;
+        }
+        let feed = feed.unwrap();
+
+        let web_pages = feed
+            .entries
+            .iter()
+            .map(|entry| WebPage::from(entry.clone()));
+
+        for mut web_page in web_pages {
+            // Ignore invalid web page
+            if web_page.publish_date > Utc::now() || !web_page.url.starts_with("http") {
+                continue;
+            }
+
+            web_page.build(connection, &stop_words)?
+        }
+    }
+    connection.execute_batch("COMMIT;")?;
     Ok(())
 }
 
-fn compute_scores(connection: &Connection, b: f64, k1: f64) -> Result<(), rusqlite::Error> {
-    let stemmer = Stemmer::create(Algorithm::English);
+fn compute_idfs(connection: &Connection) -> Result<(), rusqlite::Error> {
+    let stats = get_stats(connection)?;
+    let web_pages_count = stats.web_pages_count as f64;
 
-    // Compute avgdl
-    let mut avgdl = 0; // arbitrary, should be avg(|D|)
-    let mut doc_count = 0;
-    retrieve_web_page(connection, |web_page| {
-        doc_count += 1;
-        avgdl += web_page.tokenize(&stemmer).count();
-    })?;
-    let avgdl = avgdl as f64 / doc_count as f64;
-
-    // Cache tokens idfs, OK since there is ~300k tokens
-    let mut idfs: HashMap<String, Token> = HashMap::new();
+    let mut i = 0;
+    connection.execute_batch("BEGIN;")?;
     retrieve_tokens(connection, |token| {
-        idfs.insert(token.value.to_string(), token);
+        i += 1;
+        if i % 10_000 == 0 {
+            connection.execute_batch("COMMIT;").unwrap();
+            connection.execute_batch("BEGIN;").unwrap();
+        }
+
+        let token_count = token.count as f64;
+        let idf = (1. + (web_pages_count - token_count + 0.5) / (token_count + 0.5)).ln();
+        update_idf(connection, token.token_id, idf).unwrap();
     })?;
-
-    let mut start = Instant::now();
-    let mut k = 0;
-    retrieve_web_page(connection, |web_page| {
-        k += 1;
-        if k % 10000 == 0 {
-            println!(
-                "{k} - Processing web_page {} in {:.2} secs",
-                web_page.url,
-                (Instant::now() - start).as_secs_f64()
-            );
-            start = Instant::now();
-        }
-
-        let mut counts: HashMap<String, f64> = HashMap::new();
-
-        let mut n = 0;
-        for token in web_page.tokenize(&stemmer) {
-            n += 1;
-            counts.insert(token.clone(), counts.get(&token).unwrap_or(&0f64) + 1f64);
-        }
-        let n = n as f64;
-
-        let mut tfs = Vec::with_capacity(counts.len());
-        for (token, count) in counts {
-            let token = idfs.get(&token);
-            // tokens with idf below threshold, will be missing from the db
-            if token.is_none() {
-                continue;
-            }
-            let token = token.unwrap();
-
-            tfs.push(Tf {
-                token_id: token.token_id,
-                web_page_id: web_page.web_page_id,
-                tf: token.idf
-                    * ((count * (k1 + 1f64)) / (count + k1 * (1f64 - b + b * (n / avgdl)))),
-            });
-        }
-
-        let res = insert_tfs(&connection, &tfs);
-        if res.is_err() {
-            println!("Couldn't insert tfs from {}", web_page.url);
-            exit(1);
-        }
-    })?;
-
+    connection.execute_batch("COMMIT;")?;
     Ok(())
+}
+
+fn compute_bm25(connection: &Connection, b: f64, k1: f64) -> Result<(), rusqlite::Error> {
+    let stats = get_stats(connection)?;
+    let web_page_count = stats.web_pages_count as f64;
+    let avgdl = stats.web_page_token_count as f64 / web_page_count;
+
+    recompute_bm25(connection, k1, b, avgdl)
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -228,6 +148,10 @@ struct BuildSubCmd {
     /// rebuild from scratch, drop the table before build
     #[argh(switch)]
     rebuild: bool,
+
+    /// path to a file containing the stopwords to ignore
+    #[argh(option, default = "\"stopwords.txt\".to_string()")]
+    stop_words_file: String,
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -236,6 +160,7 @@ enum BuildSubCmds {
     WebPages(BuildWebPagesSubCmd),
     IDFs(BuildIDFsSubCmd),
     Okapi(BuildOkapiSubCmd),
+    ChampionList(BuildChampionListSubCmd),
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -250,11 +175,7 @@ struct BuildWebPagesSubCmd {
 #[derive(FromArgs, PartialEq, Debug)]
 /// Tokenize all web pages in the database and compute the IDF for each token
 #[argh(subcommand, name = "idf")]
-struct BuildIDFsSubCmd {
-    /// path to a file containing the stopwords to ignore
-    #[argh(option, default = "\"stopwords.txt\".to_string()")]
-    stop_words_file: String,
-}
+struct BuildIDFsSubCmd {}
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Build all Okapi BM25 values for each token in the database
@@ -268,6 +189,11 @@ struct BuildOkapiSubCmd {
     #[argh(option, default = "1.6")]
     k1: f64,
 }
+
+#[derive(FromArgs, PartialEq, Debug)]
+/// Build the champion list (top 1000 bm25 for each tokens)
+#[argh(subcommand, name = "championlist")]
+struct BuildChampionListSubCmd {}
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Search the wsebr database
@@ -284,6 +210,10 @@ fn main() -> Result<(), rusqlite::Error> {
     let connection = Connection::open(&wsebr.database)?;
     sqlite_init(&connection)?;
 
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
     match wsebr.subcommand {
         SubCmds::Build(build) => match build.buildcmd {
             BuildSubCmds::WebPages(args) => {
@@ -291,25 +221,19 @@ fn main() -> Result<(), rusqlite::Error> {
                     drop_web_pages(&connection)?;
                     create_web_page_table(&connection)?;
                 }
-                save_web_pages(&connection, &args.path)?;
+                save_web_pages(&connection, &args.path, &build.stop_words_file)?;
             }
 
-            BuildSubCmds::IDFs(args) => {
-                if build.rebuild {
-                    drop_tf(&connection)?;
-                    drop_tokens(&connection)?;
-                    create_token_table(&connection)?;
-                    create_tf_table(&connection)?;
-                }
-                compute_idfs(&connection, args.stop_words_file)?;
+            BuildSubCmds::IDFs(_) => {
+                compute_idfs(&connection)?;
             }
 
             BuildSubCmds::Okapi(args) => {
-                if build.rebuild {
-                    drop_tf(&connection)?;
-                    create_tf_table(&connection)?;
-                }
-                compute_scores(&connection, args.b, args.k1)?;
+                compute_bm25(&connection, args.b, args.k1)?;
+            }
+
+            BuildSubCmds::ChampionList(_) => {
+                recreate_champion_list(&connection)?;
             }
         },
         SubCmds::Search(args) => {
