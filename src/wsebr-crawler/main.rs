@@ -1,4 +1,5 @@
 use argh::{self, FromArgs};
+use chrono::Utc;
 use deadpool_sqlite::{Config, Hook, Pool, Runtime};
 use feed_rs::model::Feed;
 use feed_rs::parser::{self};
@@ -147,7 +148,9 @@ async fn increment_feed(
         let curr = curr.unwrap();
 
         if let Some(curr) = curr {
-            if web_page.publish_date <= curr.last_update {
+            if web_page.publish_date == curr.last_update ||
+                web_page.publish_date > Utc::now() ||
+                !web_page.url.starts_with("http") {
                 continue;
             }
         }
