@@ -129,6 +129,11 @@ async fn increment_feed(
     let conn = conn.unwrap();
 
     for mut web_page in web_pages {
+        // skip if invalid
+        if web_page.publish_date > Utc::now() || !web_page.url.starts_with("http") {
+            continue;
+        }
+
         let stop_words = stop_words.to_owned();
         let link = web_page.url.to_owned();
         let curr = conn
@@ -147,12 +152,11 @@ async fn increment_feed(
         }
         let curr = curr.unwrap();
 
-        if let Some(curr) = curr {
-            if web_page.publish_date == curr.last_update ||
-                web_page.publish_date > Utc::now() ||
-                !web_page.url.starts_with("http") {
-                continue;
-            }
+        // skip if already in db
+        if let Some(curr) = curr
+            && web_page.publish_date == curr.last_update
+        {
+            continue;
         }
 
         let _ = conn
