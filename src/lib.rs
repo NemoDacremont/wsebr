@@ -14,7 +14,7 @@ thread_local! {
     pub static EN_STEMMER: Stemmer = Stemmer::create(Algorithm::English);
 }
 
-pub fn sqlite_init(connection: &Connection, mmap_size: i64) -> Result<(), rusqlite::Error> {
+pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
     // Enable the use of `rarray` in queries
     load_module(connection)?;
 
@@ -23,10 +23,10 @@ pub fn sqlite_init(connection: &Connection, mmap_size: i64) -> Result<(), rusqli
     create_tf_table(connection)?;
     create_index_stats_table(connection)?;
 
-    let _ = connection.execute(
+    connection.execute_batch(
         "
         pragma temp_store           = memory;
-        pragma mmap_size            = ?;
+        pragma mmap_size            = 1000000000;
         pragma page_size            = 4096;
         pragma journal_mode         = WAL;
         pragma synchronous          = NORMAL;
@@ -34,9 +34,7 @@ pub fn sqlite_init(connection: &Connection, mmap_size: i64) -> Result<(), rusqli
         pragma wal_autocheckpoint   = 20000;
         pragma foreign_keys         = ON;
     ",
-    (mmap_size,)
-    )?;
-    Ok(())
+    )
 }
 
 pub struct WebPage {
