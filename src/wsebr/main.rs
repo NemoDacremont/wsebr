@@ -208,7 +208,7 @@ fn main() -> Result<(), rusqlite::Error> {
     let wsebr: WSEBR = argh::from_env();
 
     let connection = Connection::open(&wsebr.database)?;
-    sqlite_init(&connection)?;
+    sqlite_init(&connection, 1_000_000_000)?;
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())

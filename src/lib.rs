@@ -14,7 +14,7 @@ thread_local! {
     pub static EN_STEMMER: Stemmer = Stemmer::create(Algorithm::English);
 }
 
-pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
+pub fn sqlite_init(connection: &Connection, mmap_size: i64) -> Result<(), rusqlite::Error> {
     // Enable the use of `rarray` in queries
     load_module(connection)?;
 
@@ -23,10 +23,10 @@ pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
     create_tf_table(connection)?;
     create_index_stats_table(connection)?;
 
-    connection.execute_batch(
+    let _ = connection.execute(
         "
         pragma temp_store           = memory;
-        pragma mmap_size            = 2873152512;
+        pragma mmap_size            = ?;
         pragma page_size            = 4096;
         pragma journal_mode         = WAL;
         pragma synchronous          = NORMAL;
@@ -34,7 +34,9 @@ pub fn sqlite_init(connection: &Connection) -> Result<(), rusqlite::Error> {
         pragma wal_autocheckpoint   = 20000;
         pragma foreign_keys         = ON;
     ",
-    )
+    (mmap_size,)
+    )?;
+    Ok(())
 }
 
 pub struct WebPage {
@@ -904,6 +906,7 @@ pub fn search_query(
     if !where_sql.is_empty() {
         count_sql.push_str(&where_sql.join(" AND "));
     }
+    count_sql.push_str(" LIMIT 100;");
 
     let count =
         connection.query_one(&count_sql, (&values, &web_page_ids, true), |row| row.get(0))?;

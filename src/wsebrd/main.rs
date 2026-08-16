@@ -112,7 +112,7 @@ async fn main() -> Result<(), rusqlite::Error> {
 
     let conn = pool.get().await.unwrap();
     conn.interact(|connection| {
-        sqlite_init(&connection)?;
+        sqlite_init(&connection, 1_000_000_000)?;
 
         connection.execute_batch(
             "
